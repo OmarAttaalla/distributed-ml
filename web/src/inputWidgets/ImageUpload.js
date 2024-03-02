@@ -1,6 +1,8 @@
 import React, {useState} from "react";
 import "./ImageUpload.css";
 
+import downloadImage from "../images/download-black.png";
+
 
 export default function ImageUpload() {
     const [fileName, setFileName] = useState("No image selected");
@@ -19,19 +21,41 @@ export default function ImageUpload() {
         }
     }
 
+    function handleDragOver(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        document.getElementsByClassName('fileUploadContainer')[0].classList.add('fileUploadContainerDrag');
+        console.log('drag over');
+    }
+
+    function handleDrop(event) {
+        event.preventDefault();
+        document.getElementsByClassName('fileUploadContainer')[0].classList.remove('fileUploadContainerDrag');
+
+        var files = event.dataTransfer.files;
+        console.log(files);
+    }
+
     return (
-        <div className="fileUploadContainer">
-        <label className="fileLabel">
-            <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="inputFile"
-                multiple="multiple" 
-            />
-            Upload Image
-        </label>
-        <div className="fileName">{fileName}</div>
+        <div className="fileUploadContainer" onDragOver={handleDragOver} onDrop={handleDrop}>
+            <div className="fileUploadButtonContainer">
+                <label className="fileLabel">
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="inputFile"
+                        multiple="multiple" 
+                    />
+                    Upload Image
+                </label>
+                <div className="fileName">{fileName}</div>
+                <button className="uploadButton">Upload</button>
+            </div>
+            <div className="dropImageContainer">
+                <img src={downloadImage} alt="" className="uploadImage" />
+                Drop images here
+            </div>
         </div>
     );
 }

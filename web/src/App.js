@@ -5,7 +5,7 @@ import ImageUpload from './inputWidgets/ImageUpload';
 
 function App() {
   return (
-    <div className="App">
+    <div className="MainContainer">
       <ImageUpload />
     </div>
   );

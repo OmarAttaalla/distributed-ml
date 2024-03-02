@@ -16,13 +16,18 @@ input[type="file"] {
     border-radius: 4px;
     padding: 5px;
     font-size: 12px;
+    box-shadow: 1px 1px 5px 0px #2a2c30;
 }
 
 .fileLabel:hover {
     background-color: #4f545c;
 }
 
-.fileUploadContainer {
+.fileLabel:active {
+    background-color: #2a2c30;
+}
+
+.fileUploadButtonContainer {
     font-family: "Poppins",sans-serif;
     display: flex;
     flex-direction: row;
@@ -31,4 +36,62 @@ input[type="file"] {
     gap: 5px;
     margin-top: 10px;
     font-size: 12px;
+}
+
+.uploadButton {
+    font-family: "Poppins",sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    color: #36393e;
+    border-radius: 4px;
+    padding: 5px;
+    font-size: 12px;
+    border: none;
+    background-color: rgb(206, 206, 206);
+    box-shadow: 1px 1px 5px 0px #2a2c30;
+}
+
+.uploadButton:hover {
+    background-color: rgb(234, 234, 234);
+}
+
+.uploadButton:active {
+    background-color: rgb(182, 182, 182);
+}
+
+.fileUploadContainer {
+    width: 70%;
+    border: 1px solid rgb(206, 206, 206);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    border-style: dashed;
+}
+
+.dropImageContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 40px;
+    padding-top: 200px;
+    padding-bottom: 200px;
+    color: #fff;
+    font-size: 24px;
+}
+
+.uploadImage {
+    width: 100px;
+    filter: invert();
+    transform: rotate(180deg);
+}
+
+.fileUploadContainerDrag {
+    /* transition: all 0.3s ease-out; */
+    border: 5px solid rgb(206, 206, 206);
 }
