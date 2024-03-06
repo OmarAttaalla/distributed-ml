@@ -1,5 +1,6 @@
 import React, {useState} from "react";
 import "./ImageUpload.css";
+import axios from "axios";
 
 import downloadImage from "../images/download-black.png";
 
@@ -36,6 +37,25 @@ export default function ImageUpload() {
         console.log(files);
     }
 
+    function uploadImages() {
+        const files = document.getElementsByClassName('inputFile')[0].files;
+        const formData = new FormData();
+
+        for (let i = 0; i < files.length; i++) {
+            formData.append('file', files[i]);
+        }
+
+        axios.post('http://127.0.0.1:5000/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        }).then(response => {
+            console.log(response);
+        }).catch(error => {
+            console.log(error);
+        });
+    }
+
     return (
         <div className="fileUploadContainer" onDragOver={handleDragOver} onDrop={handleDrop}>
             <div className="fileUploadButtonContainer">
@@ -50,7 +70,7 @@ export default function ImageUpload() {
                     Upload Image
                 </label>
                 <div className="fileName">{fileName}</div>
-                <button className="uploadButton">Upload</button>
+                <button className="uploadButton" onClick={uploadImages}>Upload</button>
             </div>
             <div className="dropImageContainer">
                 <img src={downloadImage} alt="" className="uploadImage" />
