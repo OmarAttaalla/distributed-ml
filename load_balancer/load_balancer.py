@@ -1,8 +1,14 @@
 from flask import Flask, request
 import requests
 import os
+from flask_cors import CORS, cross_origin
+from werkzeug.datastructures import FileStorage
+
 
 app = Flask(__name__)
+
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 spark_nodes = ["http://127.0.0.1:5001/", "http://127.0.0.1:5002/"]
 current_node_index = 0
@@ -17,7 +23,7 @@ def get_next_round_robin():
     return current_node
 
 #uses size of incoming request to determine which server to send to next
-def get_next_weighted_round_robin(files):
+def get_least_load_first(files):
     min_load = -1
     min_index = 0
 
@@ -41,6 +47,7 @@ def get_next_weighted_round_robin(files):
         blob = file.read()
         print(len(blob))
         request_size += len(blob)
+        file.seek(0, os.SEEK_SET)
 
     node_loads[min_index] += request_size
 
@@ -48,6 +55,7 @@ def get_next_weighted_round_robin(files):
 
 
 @app.route('/upload', methods=['POST'])
+@cross_origin()
 def upload_image():
     print(request.files)
     print("REQUEST RECEIVED HERE")
@@ -55,11 +63,13 @@ def upload_image():
 
     print(files)
     
-    optimal_node = get_next_weighted_round_robin(files)
+    optimal_node = get_least_load_first(files)
 
     print(optimal_node)
 
     print(f"Sending to {optimal_node}")
+
+    print(request.files)
 
     response = requests.post(f"{optimal_node}/process", files=request.files)
     

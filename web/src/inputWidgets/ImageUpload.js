@@ -55,7 +55,7 @@ export default function ImageUpload() {
 
         let currentTime = Date.now();
 
-        axios.post('http://127.0.0.1:5001/process', formData, {
+        axios.post('http://127.0.0.1:5000/upload', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
