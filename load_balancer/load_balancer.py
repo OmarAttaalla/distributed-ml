@@ -10,7 +10,7 @@ app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
-spark_nodes = ["http://127.0.0.1:5001/", "http://127.0.0.1:5002/"]
+spark_nodes = ["http://68.5.202.220:48027/, http://68.5.202.220:48027/"]
 current_node_index = 0
 
 #current load on each node
@@ -19,6 +19,7 @@ node_loads = [0, 0]
 def get_next_round_robin():
     global current_node_index
     current_node = spark_nodes[current_node_index]
+    print(f"Sending to Master Node {current_node_index}")
     current_node_index = (current_node_index + 1) % len(spark_nodes)
     return current_node
 
@@ -51,23 +52,17 @@ def get_least_load_first(files):
 
     node_loads[min_index] += request_size
 
+    print(f"Sending to Master Node {min_index}")
+
     return spark_nodes[min_index]
 
 
 @app.route('/upload', methods=['POST'])
 @cross_origin()
 def upload_image():
-    print(request.files)
-    print("REQUEST RECEIVED HERE")
     files = request.files.listvalues()
-
-    print(files)
     
     optimal_node = get_least_load_first(files)
-
-    print(optimal_node)
-
-    print(f"Sending to {optimal_node}")
 
     print(request.files)
 

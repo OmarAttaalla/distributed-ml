@@ -7,6 +7,11 @@ from pyspark.sql.functions import col, pandas_udf
 from pyspark.sql.types import StringType
 import torch
 
+import uuid
+import os
+import csv
+from subprocess import Popen, PIPE
+
 from models.common import DetectMultiBackend
 from utils.general import (non_max_suppression, scale_boxes, xyxy2xywh)
 from utils.torch_utils import select_device
@@ -59,7 +64,39 @@ def yolov9_inference_udf(image_data_set: pd.Series) -> pd.Series:
 @app.route("/process", methods=["POST"])
 @cross_origin()
 def process():
-    df = spark.read.csv("hdfs://192.168.68.67:54310/data.csv").select(col("_c0").alias("image_path"))
+    print(request.files)
+
+    file_data = {}
+
+    for filename, file in request.files.items():
+        file_data[filename] = file
+
+    newpath = os.path.join('.', str(uuid.uuid4()))
+    if not os.path.exists(newpath):
+        os.makedirs(newpath)
+
+    index = 0
+
+    file_paths = []
+
+    for filename, file  in file_data.items():
+        if file.filename == '':
+            continue 
+
+        file.save(os.path.join(newpath, str(file.filename)))
+        print(filename, newpath)
+        file_paths.append(os.path.join(newpath, file.filename))
+        index += 1
+
+    with open('file_names.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for file_path in file_paths:
+            writer.writerow([file_path])
+
+    put = Popen(["hadoop", "fs", "-put", 'file_names.csv', "hdfs://192.168.68.67:54310/data.csv"], stdin=PIPE, bufsize=-1)
+    put.communicate()
+    
+    df = spark.read.csv('file_names.csv').select(col("_c0").alias("image_path"))
 
     results_df = df.withColumn("inference_results", yolov9_inference_udf(df["image_path"]))
 
