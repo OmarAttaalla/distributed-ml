@@ -1,69 +1,49 @@
-from flask import Flask, request
+import os
+import subprocess
+import tempfile
+import uuid
+import csv
+
+import io
+import zipfile
+
+from flask import Flask, request, send_file
 from flask_cors import CORS, cross_origin
 
-import pandas as pd
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, pandas_udf
-from pyspark.sql.types import StringType
-import torch
-
-import uuid
-import os
-import csv
-from subprocess import Popen, PIPE
-
-from models.common import DetectMultiBackend
-from utils.general import (non_max_suppression, scale_boxes, xyxy2xywh)
-from utils.torch_utils import select_device
+import pyarrow as pa
 
 app = Flask(__name__)
 
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
-spark = SparkSession.builder.appName("YOLOv9Inference").getOrCreate()
+def download_and_zip_hdfs_folder(hdfs_folder_path, local_zip_path):
+    # Connect to HDFS
+    hdfs_conn = pa.hdfs.connect()
+    
+    # Create a temporary directory to store the folder's contents
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # List all files in the HDFS folder
+        files = hdfs_conn.ls(hdfs_folder_path)
+        
+        for file_path in files:
+            # Define the local path for the file
+            local_file_path = os.path.join(tmpdirname, os.path.basename(file_path))
+            # Download the file
+            hdfs_conn.download(file_path, local_file_path)
+        
+        # Zip the contents of the temporary directory
+        with zipfile.ZipFile(local_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk(tmpdirname):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    zipf.write(file_path, arcname=os.path.relpath(file_path, tmpdirname))
 
-weights: str = '/yolov9-c.pt'
-conf_thres: float = 0.25
-iou_thres: float = 0.45
-max_det: int = 1000
-device: str = 'cpu'
-
-@pandas_udf(StringType())
-def yolov9_inference_udf(image_data_set: pd.Series) -> pd.Series:
-    device = select_device(device)
-    model = DetectMultiBackend(weights, device=device)
-    stride = model.stride
-    names = model.names
-
-    results = {}
-
-    for image_data in image_data_set:
-        img = torch.from_numpy(image_data).to(device)
-        img = img.float()
-        img /= 255.0 
-        if len(img.shape) == 3:
-            img = img.unsqueeze(0)
-
-        pred = model(img)
-
-        pred = non_max_suppression(pred, conf_thres, iou_thres, classes=None, agnostic=False, max_det=max_det)
-
-        detectionResult = []
-        for i, det in enumerate(pred):
-            if len(det):
-                det[:, :4] = scale_boxes(img.shape[2:], det[:, :4], img.shape[2:]).round()
-
-                for *xyxy, conf, cls in reversed(det):
-                    xywh = xyxy2xywh(torch.tensor(xyxy).view(1, 4)).view(-1).tolist()
-                    label = f"{names[int(cls)]} {conf:.2f}"
-                    detectionResult.append({"label": label, "bbox": xywh, "confidence": conf.item()})
-        results[image_data] = detectionResult
-    return pd.Series(results)
 
 @app.route("/process", methods=["POST"])
 @cross_origin()
 def process():
+    hdfs_connect  = pa.hdfs.connect()
     print(request.files)
 
     file_data = {}
@@ -71,36 +51,70 @@ def process():
     for filename, file in request.files.items():
         file_data[filename] = file
 
-    newpath = os.path.join('.', str(uuid.uuid4()))
-    if not os.path.exists(newpath):
-        os.makedirs(newpath)
+    uuidStr = str(uuid.uuid4())
+    newpath = f"hdfs://192.168.68.67:54310/{uuidStr}"
+    if not hdfs_connect.exists(newpath):
+        hdfs_connect.mkdir(newpath)
 
     index = 0
 
-    file_paths = []
+    hdfs_file_paths = []
 
+    # Upload images to hdfs
     for filename, file  in file_data.items():
         if file.filename == '':
             continue 
 
-        file.save(os.path.join(newpath, str(file.filename)))
-        print(filename, newpath)
-        file_paths.append(os.path.join(newpath, file.filename))
+        hdfs_file_path = f"hdfs://192.168.68.67:54310/{uuidStr}/{filename}"
+        with hdfs_connect.open(hdfs_file_path, 'wb') as hdfs_file:
+            # Stream the file from the request to HDFS in chunks
+            chunk_size = 4096  # Define the chunk size (4 KB in this example)
+            while True:
+                chunk = file.stream.read(chunk_size)
+                if not chunk:
+                    break
+                hdfs_file.write(chunk)
+
+        hdfs_file_paths.append(hdfs_file_path)
         index += 1
 
-    with open('file_names.csv', 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        for file_path in file_paths:
-            writer.writerow([file_path])
+    # Write csv to a in-memory bytes buffer
+    csv_buffer = io.BytesIO()
+    text_buffer = io.TextIOWrapper(csv_buffer, encoding='utf-8', write_through=True)
+    writer = csv.writer(text_buffer)
+    for file_path in hdfs_file_paths:
+        writer.writerow([file_path])
 
-    put = Popen(["hadoop", "fs", "-put", 'file_names.csv', "hdfs://192.168.68.67:54310/data.csv"], stdin=PIPE, bufsize=-1)
-    put.communicate()
-    
-    df = spark.read.csv('file_names.csv').select(col("_c0").alias("image_path"))
+    # Seek to the begining
+    csv_buffer.seek(0)
 
-    results_df = df.withColumn("inference_results", yolov9_inference_udf(df["image_path"]))
+    # Upload the temporary file to HDFS
+    csv_hdfs_path = f'hdfs://192.168.68.67:54310/{uuidStr}.csv'
+    with hdfs_connect.open(csv_hdfs_path, 'wb') as csvfile:
+        csvfile.write(csv_buffer.read())
 
-    results_df.show()
+    print(f"csv_hdfs_path: {csv_hdfs_path}")
+    result = subprocess.run(['./submit.sh', csv_hdfs_path], 
+                            stdout=subprocess.PIPE, 
+                            stderr=subprocess.PIPE, 
+                            text=True,
+                            cwd=os.path.join(app.root_path)
+                            )
+    # Check the output
+    if result.returncode == 0:
+        print("Script executed successfully.")
+        
+        result_hdfs_path = f"{csv_hdfs_path}.result.parquet"
+        result_local_path = os.path.join(app.root_path, f'{uuidStr}.result.zip')
+        download_and_zip_hdfs_folder(result_hdfs_path, result_local_path)
+
+        # Send the file to the client
+        return send_file(result_local_path, as_attachment=True, download_name='result.parquet.zip')
+
+    else:
+        print("Script execution failed.")
+        print(result.stderr)
+        return result.stderr 
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5001)
