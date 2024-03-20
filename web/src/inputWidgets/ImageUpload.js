@@ -53,12 +53,32 @@ export default function ImageUpload() {
             formData.append('file', files[i]);
         }
 
-        axios.post('http://127.0.0.1:5000/upload', formData, {
+        let currentTime = Date.now();
+
+        axios.post('http://127.0.0.1:5001/process', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
         }).then(response => {
             console.log(response);
+            const data = response.data;
+
+            console.log("Time taken: ", Date.now() - currentTime, "ms")
+
+            const jsonString = JSON.stringify(data);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'data.json';
+
+            document.body.appendChild(link);
+
+            link.click();
+
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }).catch(error => {
             console.log(error);
         });
